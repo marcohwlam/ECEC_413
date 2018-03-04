@@ -90,7 +90,32 @@ main(int argc, char** argv) {
 void
 vec_mat_mult_on_device_using_global_memory(const Matrix A, const Matrix X, Matrix Y)
 {
+	Martix A_d = allocate_matrix_on_gpu(A);
+	Matrix X_d = allocate_matrix_on_gpu(X);
+	Matrix Y_d = allocate_matrix_on_gpu(Y);
 
+	copy_matrix_to_device(A_d,A);
+	copy_matrix_to_device(X_d,X);
+
+	
+	dim3 dimBlock(MATRIX_SIZE,MATRIX_SIZE,1);
+	dim3 dimGrid(A_d.width/dimBlock.x, X_d.height/dimBlock.y,1);
+
+	printf("Setting up a %d x %d grid of thread blocks. \n", dimGrid.x, dimGrid.y);
+
+	struct timeval start, stop;
+	gettimeofday(&start, NULL);
+	vec_mat_kernel_naive<<<dimGrid, dimBlock>>>(A_d.elements,X_d.elements,Y_d.elements);
+
+	cudaThreadSynchronize();
+	gettimeofday(&stop, NULL);
+	printf("Execution time = %fs. \n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+
+	// Read P from the device
+	copy_matrix_from_device(Y, Yd);
+	cudaFree(A_dev.elements);
+	cudaFree(X_dev.elements);
+	cudaFree(Y_dev.elements);
 }
 
 // Complete the functionality of vector-matrix multiplication using the GPU
