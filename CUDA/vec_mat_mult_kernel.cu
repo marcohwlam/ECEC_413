@@ -11,6 +11,20 @@
 __global__ void vec_mat_kernel_naive(float *Ad, float *Xd, float *Yd)
 {
 	//Multiply A and X
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+	int k,j;
+
+	float value;
+
+	for (k = 0; k < MATRIX_SIZE; k++){
+		value = 0;
+		for (j = 0l j < MATRIX_SIZE; j++){
+			value = Ad[k*MATRIX_SIZE+j]*Xd[j];
+		}
+		Yd[i] = value;
+	}
 }
 
 
