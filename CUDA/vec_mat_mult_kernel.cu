@@ -14,14 +14,14 @@ __global__ void vec_mat_kernel_naive(float *Ad, float *Xd, float *Yd)
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
 	int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-	int k,j;
+	int i,j;
 
 	float value;
 
-	for (k = 0; k < MATRIX_SIZE; k++){
+	for (i = 0; i < MATRIX_SIZE; i++){
 		value = 0;
-		for (j = 0l j < MATRIX_SIZE; j++){
-			value = Ad[k*MATRIX_SIZE+j]*Xd[j];
+		for (j = 0; j < MATRIX_SIZE; j++){
+			value = Ad[i*MATRIX_SIZE+j]*Xd[j];
 		}
 		Yd[i] = value;
 	}
