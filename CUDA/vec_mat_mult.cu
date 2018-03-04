@@ -29,36 +29,36 @@ float get_random_number(int, int);
 int checkResults(float *, float *, int, float);
 
 
-int 
+int
 main(int argc, char** argv) {
 	// Matrices for the program
 	Matrix  A; // N x N matrix
 	Matrix  X; // N x 1 vector
 	Matrix  Y_cpu, Y_gpu_1, Y_gpu_2; // N x 1 vector
-	
-	// Initialize the random number generator with a seed value 
+
+	// Initialize the random number generator with a seed value
 	srand(time(NULL));
-	
+
 	// Check command line arguments
 	if(argc > 1){
 		printf("Error. This program accepts no arguments. \n");
 		exit(0);
-	}		
-	 
+	}
+
 	// Allocate and initialize the matrices
 	A  = allocate_matrix(MATRIX_SIZE, MATRIX_SIZE, 1); // Create a random N x N matrix
-	X  = allocate_matrix(MATRIX_SIZE, 1, 1); // Create a random N x 1 vector 
+	X  = allocate_matrix(MATRIX_SIZE, 1, 1); // Create a random N x 1 vector
 	Y_cpu  = allocate_matrix(MATRIX_SIZE, 1, 0); // Allocate memory for the output vectors
-	Y_gpu_1 = allocate_matrix(MATRIX_SIZE, 1, 0); 
+	Y_gpu_1 = allocate_matrix(MATRIX_SIZE, 1, 0);
     Y_gpu_2 = allocate_matrix(MATRIX_SIZE, 1, 0);
- 
-    // compute the vector-matrix multiplication on the CPU for comparison    	
+
+    // compute the vector-matrix multiplication on the CPU for comparison
 	compute_gold(Y_cpu.elements, A.elements, X.elements, A.num_rows, A.num_columns);
-	
+
 	// Perform the vector-matrix multiplication on the GPU using global memory
     // Return the results in Y_gpu_1
 	vec_mat_mult_on_device_using_global_memory(A, X, Y_gpu_1);
-   
+
 	// check if the device result is equivalent to the expected solution
     printf("Checking against reference result. \n");
 	int size_elements = NUM_ROWS;
@@ -69,7 +69,7 @@ main(int argc, char** argv) {
     // Perform the vector-matrix multiplication on the GPU using shared memory
     // Return the results in Y_gpu_2
 	vec_mat_mult_on_device_using_shared_memory(A, X, Y_gpu_2);
-   
+
 	// check if the device result is equivalent to the expected solution
     printf("Checking against reference result. \n");
     res = checkResults(Y_cpu.elements, Y_gpu_2.elements, size_elements, 0.0001);
@@ -80,14 +80,14 @@ main(int argc, char** argv) {
 	free(X.elements); X.elements = NULL;
 	free(Y_cpu.elements); Y_cpu.elements = NULL;
 	free(Y_gpu_1.elements); Y_gpu_1.elements = NULL;
-    free(Y_gpu_2.elements); Y_gpu_2.elements = NULL;
+  free(Y_gpu_2.elements); Y_gpu_2.elements = NULL;
 
 	return 0;
 }
 
-// Complete the functionality of vector-matrix multiplication using the GPU 
+// Complete the functionality of vector-matrix multiplication using the GPU
 // Kernel should use global memory
-void 
+void
 vec_mat_mult_on_device_using_global_memory(const Matrix A, const Matrix X, Matrix Y)
 {
 
@@ -95,15 +95,54 @@ vec_mat_mult_on_device_using_global_memory(const Matrix A, const Matrix X, Matri
 
 // Complete the functionality of vector-matrix multiplication using the GPU
 // Kernel should use shared memory
-void 
+void
 vec_mat_mult_on_device_using_shared_memory(const Matrix A, const Matrix X, Matrix Y)
 {
+	// Load M and N to the device
+	Matrix Md = AllocateDeviceMatrix(A);
+	copy_matrix_to_device(Ad, A);
+	Matrix Nd = AllocateDeviceMatrix(X);
+	copy_matrix_to_device(Xd, X);
 
+	// Allocate P on the device
+	Matrix Pd = AllocateDeviceMatrix(Y);
+	copy_matrix_to_device(Yd, Y); // Clear memory
+
+	// Setup the execution configuration
+	dim3 dimBlock, dimGrid;
+	dimBlock.x = dimBlock.y = TILE_SIZE;
+	dimBlock.z = 1;
+	dimGrid.x = (P.width / dimBlock.x) + ((P.width % dimBlock.x) ? 1:0 );
+	dimGrid.y = (P.height / dimBlock.y) + ((P.height % dimBlock.y) ? 1:0 );
+	dimGrid.z = 1;
+
+	printf("Setting up a %d x %d grid of thread blocks. \n", dimGrid.x, dimGrid.y);
+
+	struct timeval start, stop;
+gettimeofday(&start, NULL);
+
+// Launch the device computation threads!
+vec_mat_kernel_optimized<<<dimGrid,dimBlock>>>(Ad.elements,Xd.elements,Yd.elements);
+cudaThreadSynchronize();
+
+	gettimeofday(&stop, NULL);
+printf("Execution time = %fs. \n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+
+	checkCUDAError("Error in kernel");
+
+
+	// Read P from the device
+	copy_matrix_from_device(Y, Yd);
+
+	// Free device matrices
+	FreeDeviceMatrix(&Ad);
+	FreeDeviceMatrix(&Xd);
+	FreeDeviceMatrix(&Yd);
 }
 
 
 // Allocate a device matrix of same size as M.
-Matrix 
+Matrix
 allocate_matrix_on_gpu(const Matrix M)
 {
     Matrix Mdevice = M;
@@ -113,27 +152,27 @@ allocate_matrix_on_gpu(const Matrix M)
 }
 
 // Allocate a matrix of dimensions height*width
-//	If init == 0, initialize to all zeroes.  
+//	If init == 0, initialize to all zeroes.
 //	If init == 1, perform random initialization.
-Matrix 
+Matrix
 allocate_matrix(int num_rows, int num_columns, int init)
 {
     	Matrix M;
     	M.num_columns = M.pitch = num_columns;
     	M.num_rows = num_rows;
     	int size = M.num_rows * M.num_columns;
-		
+
 	M.elements = (float*) malloc(size*sizeof(float));
 	for(unsigned int i = 0; i < size; i++){
-		if(init == 0) M.elements[i] = 0; 
+		if(init == 0) M.elements[i] = 0;
 		else
 			M.elements[i] = get_random_number(MIN_NUMBER, MAX_NUMBER);
 	}
     return M;
-}	
+}
 
 // Copy a host matrix to a device matrix.
-void 
+void
 copy_matrix_to_device(Matrix Mdevice, const Matrix Mhost)
 {
     int size = Mhost.num_rows * Mhost.num_columns * sizeof(float);
@@ -144,7 +183,7 @@ copy_matrix_to_device(Matrix Mdevice, const Matrix Mhost)
 }
 
 // Copy a device matrix to a host matrix.
-void 
+void
 copy_matrix_from_device(Matrix Mhost, const Matrix Mdevice)
 {
     int size = Mdevice.num_rows * Mdevice.num_columns * sizeof(float);
@@ -152,29 +191,29 @@ copy_matrix_from_device(Matrix Mhost, const Matrix Mdevice)
 }
 
 // Prints the matrix out to screen
-void 
+void
 print_matrix(const Matrix M)
 {
 	for(unsigned int i = 0; i < M.num_rows; i++){
 		for(unsigned int j = 0; j < M.num_columns; j++)
 			printf("%f ", M.elements[i*M.num_columns + j]);
 		printf("\n");
-	} 
+	}
 	printf("\n");
 }
 
-// Returns a random floating-point number between the specified min and max values 
-float 
+// Returns a random floating-point number between the specified min and max values
+float
 get_random_number(int min, int max){
 	return (float)floor((double)(min + (max - min + 1)*((float)rand()/(float)RAND_MAX)));
 }
 
-int 
+int
 checkResults(float *reference, float *gpu_result, int num_elements, float threshold)
 {
     int checkMark = 1;
     float epsilon = 0.0;
-    
+
     for(int i = 0; i < num_elements; i++)
         if(fabsf((reference[i] - gpu_result[i])/reference[i]) > threshold){
             checkMark = 0;
@@ -186,8 +225,6 @@ checkResults(float *reference, float *gpu_result, int num_elements, float thresh
             epsilon = fabsf((reference[i] - gpu_result[i])/reference[i]);
         }
 
-    printf("Max epsilon = %f. \n", epsilon); 
+    printf("Max epsilon = %f. \n", epsilon);
     return checkMark;
 }
-
-
