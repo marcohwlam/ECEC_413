@@ -83,7 +83,7 @@ main(int argc, char** argv) {
   gettimeofday(&stop, NULL);
 		float shared_mem_time = (float) (stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec) / (float) 1000000);
   printf("GPU (shared) Execution time = %fs. \n", shared_mem_time);
-		printf("GPU (global) Speed up =  %fs. \n", shared_mem_time/golden_time);
+		printf("GPU (shared) Speed up =  %fs. \n", shared_mem_time/golden_time);
 
   // check if the device result is equivalent to the expected solution
   printf("Checking against reference result. \n");
