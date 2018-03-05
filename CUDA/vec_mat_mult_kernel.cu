@@ -31,48 +31,40 @@ __global__ void vec_mat_kernel_naive(float *Ad, float *Xd, float *Yd)
 /* Write the kernel for vector-matrix multiplication using GPU shared memory. */
 __global__ void vec_mat_kernel_optimized(float *Ad, float *Xd, float *Yd)
 {
-    __shared__ float Asub[TILE_SIZE][TILE_SIZE];
-    __shared__ float Xsub[TILE_SIZE][TILE_SIZE];
+	__shared__ float a_blk[TILE_SIZE][TILE_SIZE];
 
-    int tx = threadIdx.x; // Obtain the x-index within the thread block
-    int ty = threadIdx.y; // Obtain the y-index within the thread block
-    int row = (blockDim.y * blockIdx.y + ty); // Perform the thread to data ID mapping
-    int col = blockDim.x * blockIdx.x + tx;
-    int k = 0;
-    int temp;
-    double Ysub = 0.0f;
+	__shared__ float partials_sum[TILE_SIZE][TILE_SIZE];
 
-    while(k < MATRIX_SIZE){
-        // Check M edge condtions for this tile
-        if(k + tx < MATRIX_SIZE && row < MATRIX_SIZE)
-            Asub[ty][tx] = Ad[row*MATRIX_SIZE + k + tx];
-        else
-            Asub[ty][tx] = 0.0f; // Pad out the shared memory area
+	unsigned int row = blockIdx.y * blockDim.y + threadIdx.y;
+	unsigned int row_stride = blockDim.y * gridDim.y;
+	unsigned int col = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int col_stride = blockDim.x * gridDim.x;
 
 
-        // Check N edge conditions for this tile
-        if(k + threadIdx.y < MATRIX_SIZE && col < MATRIX_SIZE)
-            Xsub[ty][tx] = Xd[(k+ty)*MATRIX_SIZE + col];
-        else
-            Xsub[ty][tx] = 0.0f; // Pad out the shared memory area
+	unsigned int i, j, k;
+	float sum;
+	for (i = row; i < NUM_ROWS; i += row_stride)
+	{
 
-        __syncthreads(); // Barrier sync for threads to wait while shared memory is populated by the thread block
+			sum = 0;
+			for (j = col; j < NUM_COLUMNS; j += col_stride)
+			{
+					a_blk[threadIdx.y][threadIdx.x] = Ad[i * NUM_ROWS + j];
 
+					sum += a_blk[threadIdx.y][threadIdx.x] * Xd[j];
+			}
 
-        // Multiply the row and column entries corresponding to the tile just loaded
-        for(temp = 0; temp < TILE_SIZE; temp++)
-            Ysub += (double)Asub[ty][temp] * (double)Xsub[temp][tx];
+			partials_sum[threadIdx.y][threadIdx.x] = sum;
 
-        __syncthreads();
+			for (k = 1; k < blockDim.x; ++k)
+					if (threadIdx.x == 0)
+							sum += partials_sum[threadIdx.y][k];
 
-        k += TILE_SIZE;
-    }
-
-    // Output edge condition check
-    if(col < MATRIX_SIZE && row < MATRIX_SIZE)
-        Yd[row*MATRIX_SIZE + col] = (float)Ysub;
-
-    return;
+			if (threadIdx.x == 0)
+			{
+					Yd[i] = sum;
+			}
+	}
 }
 
 

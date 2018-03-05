@@ -16,5 +16,5 @@ compute_gold(float* Y, const float* A, const float* X, unsigned int num_rows, un
                 	sum += a * b;
            	 }	
             	Y[i] = (float)sum; // Store result in Y
-	}	
+	}
 }

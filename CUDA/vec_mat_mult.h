@@ -3,6 +3,8 @@
 
 // Define matrix dimensions
 #define MATRIX_SIZE 1024
+#define THREAD_LIMIT 1024
+#define TILE_SIZE 32
 #define NUM_COLUMNS MATRIX_SIZE // Number of columns in Matrix A
 #define NUM_ROWS MATRIX_SIZE // Number of rows in Matrix A
 
@@ -21,4 +23,3 @@ typedef struct {
 
 
 #endif // _MATRIXMUL_H_
-

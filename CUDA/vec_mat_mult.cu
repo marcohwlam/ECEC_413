@@ -9,7 +9,7 @@
 #include <time.h>
 #include <string.h>
 #include <math.h>
-
+#include <sys/time.h>
 
 #include "vec_mat_mult_kernel.cu"
 
@@ -50,30 +50,45 @@ main(int argc, char** argv) {
 	X  = allocate_matrix(MATRIX_SIZE, 1, 1); // Create a random N x 1 vector
 	Y_cpu  = allocate_matrix(MATRIX_SIZE, 1, 0); // Allocate memory for the output vectors
 	Y_gpu_1 = allocate_matrix(MATRIX_SIZE, 1, 0);
-    Y_gpu_2 = allocate_matrix(MATRIX_SIZE, 1, 0);
+  Y_gpu_2 = allocate_matrix(MATRIX_SIZE, 1, 0);
 
-    // compute the vector-matrix multiplication on the CPU for comparison
-	compute_gold(Y_cpu.elements, A.elements, X.elements, A.num_rows, A.num_columns);
+  printf("Matrix Size : %d x %d. \n", MATRIX_SIZE, MATRIX_SIZE);
+  // compute the vector-matrix multiplication on the CPU for comparison
+  struct timeval start, stop;
+  gettimeofday(&start, NULL);
+  compute_gold(Y_cpu.elements, A.elements, X.elements, A.num_rows, A.num_columns);
+  gettimeofday(&stop, NULL);
+	float golden_time = (float) (stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec) / (float) 1000000);
+  printf("CPU Execution time = %fs. \n", golden_time);
 
-	// Perform the vector-matrix multiplication on the GPU using global memory
-    // Return the results in Y_gpu_1
-	vec_mat_mult_on_device_using_global_memory(A, X, Y_gpu_1);
+  // Perform the vector-matrix multiplication on the GPU using global memory
+  // Return the results in Y_gpu_1
+  gettimeofday(&start, NULL);
+  vec_mat_mult_on_device_using_global_memory(A, X, Y_gpu_1);
+  gettimeofday(&stop, NULL);
+	float global_time = (float) (stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec) / (float) 1000000);
+  printf("GPU (global) Execution time = %fs. \n", global_time);
+	printf("GPU (global) Speed up =  %fs. \n", global_time/golden_time);
+  // check if the device result is equivalent to the expected solution
+  printf("Checking against reference result. \n");
+  int size_elements = NUM_ROWS;
+  int res = checkResults(Y_cpu.elements, Y_gpu_1.elements, size_elements, 0.0001);
+  printf("Test %s\n", (1 == res) ? "PASSED" : "FAILED");
 
-	// check if the device result is equivalent to the expected solution
-    printf("Checking against reference result. \n");
-	int size_elements = NUM_ROWS;
-	int res = checkResults(Y_cpu.elements, Y_gpu_1.elements, size_elements, 0.0001);
-	printf("Test %s\n", (1 == res) ? "PASSED" : "FAILED");
 
+  // Perform the vector-matrix multiplication on the GPU using shared memory
+  // Return the results in Y_gpu_2
+  gettimeofday(&start, NULL);
+  vec_mat_mult_on_device_using_shared_memory(A, X, Y_gpu_2);
+  gettimeofday(&stop, NULL);
+		float shared_mem_time = (float) (stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec) / (float) 1000000);
+  printf("GPU (shared) Execution time = %fs. \n", shared_mem_time);
+		printf("GPU (global) Speed up =  %fs. \n", shared_mem_time/golden_time);
 
-    // Perform the vector-matrix multiplication on the GPU using shared memory
-    // Return the results in Y_gpu_2
-	vec_mat_mult_on_device_using_shared_memory(A, X, Y_gpu_2);
-
-	// check if the device result is equivalent to the expected solution
-    printf("Checking against reference result. \n");
-    res = checkResults(Y_cpu.elements, Y_gpu_2.elements, size_elements, 0.0001);
-	printf("Test %s\n", (1 == res) ? "PASSED" : "FAILED");
+  // check if the device result is equivalent to the expected solution
+  printf("Checking against reference result. \n");
+  res = checkResults(Y_cpu.elements, Y_gpu_2.elements, size_elements, 0.0001);
+  printf("Test %s\n", (1 == res) ? "PASSED" : "FAILED");
 
 	// Free host matrices
 	free(A.elements); A.elements = NULL;
@@ -90,32 +105,32 @@ main(int argc, char** argv) {
 void
 vec_mat_mult_on_device_using_global_memory(const Matrix A, const Matrix X, Matrix Y)
 {
-	Martix A_d = allocate_matrix_on_gpu(A);
-	Matrix X_d = allocate_matrix_on_gpu(X);
-	Matrix Y_d = allocate_matrix_on_gpu(Y);
-
-	copy_matrix_to_device(A_d,A);
-	copy_matrix_to_device(X_d,X);
-
-	
-	dim3 dimBlock(MATRIX_SIZE,MATRIX_SIZE,1);
-	dim3 dimGrid(A_d.width/dimBlock.x, X_d.height/dimBlock.y,1);
-
-	printf("Setting up a %d x %d grid of thread blocks. \n", dimGrid.x, dimGrid.y);
-
-	struct timeval start, stop;
-	gettimeofday(&start, NULL);
-	vec_mat_kernel_naive<<<dimGrid, dimBlock>>>(A_d.elements,X_d.elements,Y_d.elements);
-
-	cudaThreadSynchronize();
-	gettimeofday(&stop, NULL);
-	printf("Execution time = %fs. \n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
-
-	// Read P from the device
-	copy_matrix_from_device(Y, Yd);
-	cudaFree(A_dev.elements);
-	cudaFree(X_dev.elements);
-	cudaFree(Y_dev.elements);
+	// Martix A_d = allocate_matrix_on_gpu(A);
+	// Matrix X_d = allocate_matrix_on_gpu(X);
+	// Matrix Y_d = allocate_matrix_on_gpu(Y);
+	//
+	// copy_matrix_to_device(A_d,A);
+	// copy_matrix_to_device(X_d,X);
+	//
+	//
+	// dim3 dimBlock(MATRIX_SIZE,MATRIX_SIZE,1);
+	// dim3 dimGrid(A_d.width/dimBlock.x, X_d.height/dimBlock.y,1);
+	//
+	// printf("Setting up a %d x %d grid of thread blocks. \n", dimGrid.x, dimGrid.y);
+	//
+	// struct timeval start, stop;
+	// gettimeofday(&start, NULL);
+	// vec_mat_kernel_naive<<<dimGrid, dimBlock>>>(A_d.elements,X_d.elements,Y_d.elements);
+	//
+	// cudaThreadSynchronize();
+	// gettimeofday(&stop, NULL);
+	// printf("Execution time = %fs. \n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
+	//
+	// // Read P from the device
+	// copy_matrix_from_device(Y, Yd);
+	// cudaFree(A_dev.elements);
+	// cudaFree(X_dev.elements);
+	// cudaFree(Y_dev.elements);
 }
 
 // Complete the functionality of vector-matrix multiplication using the GPU
@@ -124,45 +139,40 @@ void
 vec_mat_mult_on_device_using_shared_memory(const Matrix A, const Matrix X, Matrix Y)
 {
 	// Load M and N to the device
-	Matrix Md = AllocateDeviceMatrix(A);
+	Matrix Ad = allocate_matrix_on_gpu(A);
 	copy_matrix_to_device(Ad, A);
-	Matrix Nd = AllocateDeviceMatrix(X);
+	Matrix Xd = allocate_matrix_on_gpu(X);
 	copy_matrix_to_device(Xd, X);
 
 	// Allocate P on the device
-	Matrix Pd = AllocateDeviceMatrix(Y);
+	Matrix Yd = allocate_matrix_on_gpu(Y);
 	copy_matrix_to_device(Yd, Y); // Clear memory
 
 	// Setup the execution configuration
-	dim3 dimBlock, dimGrid;
-	dimBlock.x = dimBlock.y = TILE_SIZE;
-	dimBlock.z = 1;
-	dimGrid.x = (P.width / dimBlock.x) + ((P.width % dimBlock.x) ? 1:0 );
-	dimGrid.y = (P.height / dimBlock.y) + ((P.height % dimBlock.y) ? 1:0 );
-	dimGrid.z = 1;
+	dim3 dimBlock(16, 16, 1);
+	int num_rows = ceil((float)A.num_rows / 16);
+	dim3 dimGrid(1, num_rows);
 
-	printf("Setting up a %d x %d grid of thread blocks. \n", dimGrid.x, dimGrid.y);
+	printf("Running the functionality of vector-matrix multiplication using the shared memory\n");
 
 	struct timeval start, stop;
-gettimeofday(&start, NULL);
+	gettimeofday(&start, NULL);
 
-// Launch the device computation threads!
-vec_mat_kernel_optimized<<<dimGrid,dimBlock>>>(Ad.elements,Xd.elements,Yd.elements);
-cudaThreadSynchronize();
+	// Launch the device computation threads!
+	vec_mat_kernel_optimized<<<dimGrid,dimBlock>>>(Ad.elements,Xd.elements,Yd.elements);
+	cudaThreadSynchronize();
 
 	gettimeofday(&stop, NULL);
-printf("Execution time = %fs. \n", (float)(stop.tv_sec - start.tv_sec + (stop.tv_usec - start.tv_usec)/(float)1000000));
-
-	checkCUDAError("Error in kernel");
+	printf("Execution time = %fs. \n", (float)(stop.tv_sec-start.tv_sec+(stop.tv_usec - start.tv_usec)/(float)1000000));
 
 
 	// Read P from the device
 	copy_matrix_from_device(Y, Yd);
 
 	// Free device matrices
-	FreeDeviceMatrix(&Ad);
-	FreeDeviceMatrix(&Xd);
-	FreeDeviceMatrix(&Yd);
+	cudaFree(Ad.elements);
+	cudaFree(Xd.elements);
+	cudaFree(Yd.elements);
 }
 
 
